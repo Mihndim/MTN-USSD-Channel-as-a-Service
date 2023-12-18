@@ -2,8 +2,8 @@ require("dotenv").config();
 const axios = require("axios");
 
 module.exports.checkBill = async (req, res) => {
-  // const userEntry = req.headers["user-entry"]; // You know how this value will be passed from their system to ours. We assume it will passed as header parameter.
   const invoiceNumber = req.body.InvoiceNumber;
+  console.log(invoiceNumber);
 
   try {
     const response = await axios.get(
@@ -18,6 +18,7 @@ module.exports.checkBill = async (req, res) => {
     );
 
     const data = await response.data;
+    console.log(data.code);
 
     if (data.code === 404) {
       message = "The bill reference is incorrect, please verify and try again";
@@ -36,40 +37,26 @@ module.exports.checkBill = async (req, res) => {
       return res.json(pageContent);
     }
 
-    // if (
-    //   data.code === 0 &&
-    //   data.result.status === "PENDING_PAYMENT" &&
-    //   data.result.amount > 1000000
-    // ) {
-    //   message = `Amount is not authorized by this payment method. Please call 650 774 040 for instructions on how to pay`;
-
-    //   pageContent = {
-    //     page: {
-    //       session_end: "true",
-    //     },
-    //     message: `${message}`,
-    //   };
-
-    //   xmlResponse = convert.json2xml(pageContent, options);
-
-    //   return res.send(xmlResponse);
-    // }
-
-    // to be updated: && data.result.status === "PENDING_PAYMENT"
-
     if (data.code === 0) {
-      message = `Issuer: ${data.result.sender.businessName}, \n Payee: ${
-        data.result.recipient.firstName
-      }, \n Bill Type: ${data.result.category}, \n Amount: ${
-        data.result.amount
-      }, \n Status: ${data.result.status}, \n Deadline: ${new Date(
-        data.result.expiresOn
-      ).toLocaleDateString()}`;
+      message = `Issuer: ${
+        data.result.sender.businessName.length > 11
+          ? data.result.sender.businessName.slice(0, 11)
+          : data.result.sender.businessName
+      },
+      Payee: ${
+        data.result.recipient.firstName.length > 10
+          ? data.result.recipient.firstName.slice(0, 10)
+          : data.result.recipient.firstName
+      },
+      Bill Type: ${data.result.category},
+      Amount: ${data.result.amount},
+      Status: ${data.result.status},
+      Deadline: ${new Date(data.result.expiresOn).toLocaleDateString()}`;
 
       pageContent = {
         message: `${message}`, // Might not be needed
-        invoiceamount: `${data.result.amount}`,
-        InvoiceNumber: invoiceNumber,
+        // invoiceamount: `${data.result.amount}`,
+        // InvoiceNumber: invoiceNumber,
         page: {
           // Might not be needed
           menu: "true",
@@ -80,29 +67,10 @@ module.exports.checkBill = async (req, res) => {
 
       return res.json(pageContent);
     }
-
-    // Expired bill
-    //     if (
-    //       data.code === 0 &&
-    //       (data.result.status === "PAID" || data.result.status === "EXPIRED")
-    //     ) {
-    //       message = `The bill with reference ${data.result.referenceId} of amount: ${data.result.amount} is already ${data.result.status}. Thank you very much for using Diool Bills Payment`;
-
-    //       pageContent = {
-    //         page: {
-    //           session_end: "true",
-    //         },
-    //         message: `${message}`, // customize messages will be useful here.
-    //       };
-
-    //       xmlResponse = convert.json2xml(pageContent, options);
-
-    //       return res.send(xmlResponse);
-    //     }
   } catch (error) {
     pageContent = {
-      //message: `${error.message}`,
-      message: `We were faced with an error while processing your request, please try again later`,
+      message: `${error.message}`,
+      //message: `We were faced with an error while processing your request, please try again later`,
       page: {
         session_end: "true",
       },
@@ -122,18 +90,19 @@ module.exports.settleRfp = async (req, res) => {
       },
       {
         headers: {
-          Authorization: `${process.env.checkBillToken}`,
+          Authorization: `Bearer ${process.env.checkBillToken}`,
           "Content-Type": "application/json",
           "X-Beversion": "4.0.0",
         },
       }
     );
 
-    const data = await response.data;
-    console.log(data);
+    const postData = await response.data;
+    console.log("postData", postData);
   };
 
   try {
+    console.log("requestBody", req.body.InvoiceNumber);
     const response = await axios.get(
       `https://core.diool.me/core/onlinepayment/v1/payment/${req.body.InvoiceNumber}`,
       {
@@ -146,30 +115,23 @@ module.exports.settleRfp = async (req, res) => {
     );
 
     let responseData = await response.data;
+    console.log("responseData", responseData);
 
     try {
       if (
         responseData.code === 0 &&
-        responseData.result.status === "PENDING_PAYMENT" &&
-        responseData.result.amount > 1000000
+        responseData.result.status === "PENDING_PAYMENT"
       ) {
-        message = `Get a MoMo merchant account to make payments about 1 million. Dial 8787 for support`;
-        pageContent = {
+        setTimeout(async () => {
+          await sendPaymentRequest();
+        }, 1000);
+        return res.json({
           page: {
             session_end: "true",
           },
-          message: `${message}`,
-        };
-        return res.json(pageContent);
-      }
-      if (
-        responseData.code === 0 &&
-        responseData.result.status === "PENDING_PAYMENT"
-      ) {
-        setTimeout(() => {
-          console.log("The sendPaymentRequest function was called ! ");
-          sendPaymentRequest();
-        }, 1000);
+          message:
+            "Your request is being processed. To finalize your transaction, please dial *126# and enter your PIN code", // customize messages will be useful here.
+        }); // Message to be customized based on the Telco....
       } else {
         message = `The bill with reference: ${req.body.InvoiceNumber} can not be paid because it is ${responseData.result.status} `;
         pageContent = {
@@ -180,21 +142,13 @@ module.exports.settleRfp = async (req, res) => {
         };
         return res.json(pageContent);
       }
-
-      return res.json({
-        page: {
-          session_end: "true",
-        },
-        message:
-          "Your request is being processed. To finalize your transaction, please dial *126# and enter your PIN code", // customize messages will be useful here.
-      }); // Message to be customized based on the Telco....
     } catch (error) {
       return res.json({
         page: {
           session_end: "true",
         },
-        //"message": `${error.message}`
-        message: `We were faced with an error while processing your request, please try again later`,
+        message: `${error.message}`,
+        //message: `We were faced with an error while processing your request, please try again later`,
       });
     }
   } catch (error) {
