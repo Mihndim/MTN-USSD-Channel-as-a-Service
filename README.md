@@ -16,7 +16,7 @@ This is a node server that handle requests from MTN MoMo channels as a service, 
 - vS code
 
 ## Getting Started
-- git clone git@github.com:Mihndim/Diool-Myriad-USSD-App.git
+- git clone git@github.com:Mihndim/MTN-USSD-Channel-as-a-Service.git
 - cd Diool-Myriad-USSD-App
 - Use npm install to install dependencies
 - Run npm run dev to start the dev server
